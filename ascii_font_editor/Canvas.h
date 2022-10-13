@@ -72,6 +72,7 @@ protected:
 	std::atomic<bool>					_regulatingOpacity;
 	float								_initialROPos;
 	float								_opacity;
+	bitmap_t							_copiedCell;
 
 	Canvas(Canvas&) = delete;
 	Canvas& operator=(Canvas&) = delete;
@@ -106,4 +107,6 @@ public:
 	void ReInit(const bitmap_t& bmp, int w, int h, int scale);
 	void DoReinit();
 	void SetOwner(void* ptr);
+	void CopyCell(int h, int w, int count);
+	void PasteCell(int h, int w, int count);
 };

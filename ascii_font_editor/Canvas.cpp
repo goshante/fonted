@@ -303,6 +303,7 @@ void Canvas::_draw()
 		_doDraw = 0;
 		_redrawMenu();
 		_reinit.reset();
+		_copiedCell.clear();
 
 		::SetForegroundWindow(GetHWND());
 		::SetFocus(GetHWND());
@@ -489,4 +490,58 @@ bool Canvas::ReinitReady() const
 void Canvas::SetOwner(void* ptr)
 {
 	_owner = ptr;
+}
+
+void Canvas::CopyCell(int h, int w, int count)
+{
+	std::lock_guard<std::mutex> guard(_lock);
+	_copiedCell.clear();
+	InitBitmap(_copiedCell, h, w);
+	int cc = 0;
+	for (size_t y = 0; y < _frame.size(); y += h + 1)
+	{
+		for (size_t x = 0; x < _frame[0].size(); x += w + 1)
+		{
+			if (cc >= count)
+				break;
+
+			if (_pointY >= y && _pointY < (y + h) && _pointX >= x && _pointX < (x + w))
+			{
+				for (size_t yy = 0; yy < h; yy++)
+				{
+					for (size_t xx = 0; xx < w; xx++)
+						_copiedCell[yy][xx] = _frame[y + yy][x + xx];
+				}
+				cc++;
+			}
+		}
+	}
+}
+
+void Canvas::PasteCell(int h, int w, int count)
+{
+	std::lock_guard<std::mutex> guard(_lock);
+
+	if (_copiedCell.empty())
+		return;
+
+	int cc = 0;
+	for (size_t y = 0; y < _frame.size(); y += h + 1)
+	{
+		for (size_t x = 0; x < _frame[0].size(); x += w + 1)
+		{
+			if (cc >= count)
+				break;
+
+			if (_pointY >= y && _pointY < (y + h) && _pointX >= x && _pointX < (x + w))
+			{
+				for (size_t yy = 0; yy < h; yy++)
+				{
+					for (size_t xx = 0; xx < w; xx++)
+						_frame[y + yy][x + xx] = _copiedCell[yy][xx];
+				}
+				cc++;
+			}
+		}
+	}
 }

@@ -124,6 +124,12 @@ bool Application::ProcessEventLoop()
 		if (GetAsyncKeyState(VK_LCONTROL) & 0x01)
 			_canvas->Draw(true);
 
+		if (GetAsyncKeyState(0x43) & 0x01) //C
+			_canvas->CopyCell(_chH, _chW, _chars);
+
+		if (GetAsyncKeyState(0x56) & 0x01) //V
+			_canvas->PasteCell(_chH, _chW, _chars);
+
 		return true;
 	}
 
