@@ -33,6 +33,8 @@ Canvas::Canvas(int w, int h, int scale, const std::string& title, bool startHidd
 	, _owner(nullptr)
 	, _holdDraw(false)
 	, _lastDrawCall(std::chrono::system_clock::now())
+	, _initialROPos(0.0f)
+	, _opacity(1.0f)
 {
 	InitBitmap(_frame, _height, _width);
 	if (!_closed)
@@ -160,13 +162,15 @@ void callbackMouse(void* owner, pw::mpos pos, int button, int action, int modes)
 		pos.x = pos.x / canv->_scale;
 		pos.y = pos.y / canv->_scale;
 
+		if (button == 1 && action == 0)
+			canv->_regulatingOpacity = false;
+			
+
 		Canvas::MenuButtons btn = Canvas::MenuButtons::None;
-		if (menu && canv->_mc && button == 0)
+		if (menu && canv->_mc && (button == 0 || button == 1))
 		{
 			canv->_doDraw = 0;
 			canv->_holdDraw = false;
-			if (action == 0)
-				return;
 
 			Canvas::TimePoint now = std::chrono::system_clock::now();
 			auto now_ms = std::chrono::time_point_cast<std::chrono::milliseconds>(now);
@@ -185,11 +189,28 @@ void callbackMouse(void* owner, pw::mpos pos, int button, int action, int modes)
 
 			if (btn == Canvas::MenuButtons::MarkerSwitch)
 			{
-				canv->_lastMenuClick = now;
-				canv->_useMarker = !canv->_useMarker;
-				canv->_redrawMenu();
+				if (button == 0)
+				{
+					if (action == 1)
+					{
+						canv->_lastMenuClick = now;
+						canv->_useMarker = !canv->_useMarker;
+						canv->_redrawMenu();
+					}
+				}
+				else if (button == 1)
+				{
+					if (action == 1)
+					{
+						canv->_regulatingOpacity = true;
+						canv->_initialROPos = float(pos.x);
+					}
+				}
 				return;
 			}
+
+			if (action == 0 || button != 0)
+				return;
 
 			if (btn != Canvas::MenuButtons::None && btn != Canvas::MenuButtons::MarkerSwitch)
 			{
@@ -224,6 +245,17 @@ bool callbackClose(void* owner)
 void callbackCursor(void* owner, pw::mpos pos)
 {
 	Canvas* canv = reinterpret_cast<Canvas*>(owner);
+	if (canv->_regulatingOpacity)
+	{
+		float diff = ((float(pos.x) / canv->_scale) - canv->_initialROPos) / 100.0f;
+		canv->_opacity += diff;
+		if (canv->_opacity < 0.1f)
+			canv->_opacity = 0.1f;
+		else if (canv->_opacity > 1.0f)
+			canv->_opacity = 1.0f;
+		glfwSetWindowOpacity(canv->_pw->_getHandle(), canv->_opacity);
+	}
+
 	if (pos.y < MenuHeight * canv->_scale || pos.x > canv->_width * canv->_scale || pos.y - (MenuHeight * canv->_scale) > canv->_height * canv->_scale)
 	{
 		canv->_pw->hideCursor(false);
@@ -243,8 +275,8 @@ void Canvas::_redrawMenu()
 	auto newDims = _menuFrame.DrawTextRegular(_menuFont, "New", 2, 1, 1, _lastButton == MenuButtons::New);
 	auto openDims = _menuFrame.DrawTextRegular(_menuFont, "Open", 5 + newDims.b_x, 1, 1, _lastButton == MenuButtons::Open);
 	auto saveDims = _menuFrame.DrawTextRegular(_menuFont, "Save", 5 + openDims.b_x, 1, 1, _lastButton == MenuButtons::Save);
-	auto markerDims = _menuFrame.DrawRect(4 + saveDims.b_x, 4, 4 + saveDims.b_x + 8, 4 + 8, _useMarker ? 3 : 4);
-	_menuFrame.DrawTextRegular(_menuFont, "By Goshante", 78 + markerDims.b_x, 1, 2);
+	auto markerDims = _menuFrame.DrawRect(4 + saveDims.b_x, 4, 4 + saveDims.b_x + 8, 4 + 8, _regulatingOpacity ? 5 : (_useMarker ? 3 : 4));
+	//_menuFrame.DrawTextRegular(_menuFont, "By Goshante", 78 + markerDims.b_x, 1, 2);
 
 	if (!firstDraw)
 	{
@@ -275,6 +307,7 @@ void Canvas::_draw()
 		::SetForegroundWindow(GetHWND());
 		::SetFocus(GetHWND());
 		::SetActiveWindow(GetHWND());
+		glfwSetWindowOpacity(_pw->_getHandle(), _opacity);
 
 		while (!_closed && _pw->isActive())
 		{
@@ -337,6 +370,8 @@ void Canvas::_draw()
 						_pw->setPixel(x, y, 0xFF00FF00);
 					else if (menu[y][x] == 4)
 						_pw->setPixel(x, y, 0x55555555);
+					else if (menu[y][x] == 5)
+						_pw->setPixel(x, y, 0xFFFFD6FF);
 					else
 						_pw->setPixel(x, y, 0xFF000044);
 				}

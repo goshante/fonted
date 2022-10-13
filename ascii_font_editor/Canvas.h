@@ -69,6 +69,9 @@ protected:
 	void*								_owner;
 	std::atomic<bool>					_holdDraw;
 	TimePoint							_lastDrawCall;
+	std::atomic<bool>					_regulatingOpacity;
+	float								_initialROPos;
+	float								_opacity;
 
 	Canvas(Canvas&) = delete;
 	Canvas& operator=(Canvas&) = delete;

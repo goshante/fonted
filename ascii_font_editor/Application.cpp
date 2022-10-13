@@ -1,5 +1,7 @@
 #include "Application.h"
 #include "Font.h"
+#include "version.h"
+
 #include <sstream>
 
 #define IDS_NEWWND						200
@@ -86,7 +88,7 @@ Application::Application()
 	_fontSeq.resize(_chars);
 	for (utf8char_t i = 0; i < (utf8char_t)_chars; i++)
 		_fontSeq[i] = i;
-	_canvas = std::make_unique<Canvas>(int(fbmp[0].size()), int(fbmp.size()), _scale, "ASCII font editor", false, 0xFFFFFF00);
+	_canvas = std::make_unique<Canvas>(int(fbmp[0].size()), int(fbmp.size()), _scale, (std::string("ASCII font editor ") + VERSION + " by Goshante").c_str(), false, 0xFFFFFF00);
 	_canvas->SetOwner(this);
 	_canvas->SetPicture(fbmp);
 	_canvas->SetCanvasCallback(&MouseEvent);
@@ -222,7 +224,7 @@ void Application::_showNewWnd()
 	CreateWindowElement(hwnd, ET_STATIC, "UI Scale:", hInstance, WS_VISIBLE, NULL, NULL, ox + 60, oy, 125, 20, false);
 	CreateWindowElement(hwnd, ET_STATIC, "Characters:", hInstance, WS_VISIBLE, NULL, NULL, ox + 60 * 2, oy, 125, 20, false);
 	oy += 17;
-	CreateWindowElement(hwnd, ET_EDIT, "16", hInstance, WS_VISIBLE | WS_BORDER | WS_TABSTOP, ES_NUMBER, HMENU(IDS_COLUMNS), ox, oy, 30, 23, false);
+	CreateWindowElement(hwnd, ET_EDIT, "24", hInstance, WS_VISIBLE | WS_BORDER | WS_TABSTOP, ES_NUMBER, HMENU(IDS_COLUMNS), ox, oy, 30, 23, false);
 	CreateWindowElement(hwnd, ET_EDIT, "3", hInstance, WS_VISIBLE | WS_BORDER | WS_TABSTOP, ES_NUMBER, HMENU(IDS_UISCALE), ox + 60, oy, 30, 23, false);
 	CreateWindowElement(hwnd, ET_EDIT, "256", hInstance, WS_VISIBLE | WS_BORDER | WS_TABSTOP, ES_NUMBER, HMENU(IDS_CHARC), ox + 60 * 2, oy, 30, 23, false);
 	oy += 25;
