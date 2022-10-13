@@ -25,82 +25,26 @@ Font::Font(const std::string& pathToTxtFont)
 	std::string fileContent = buf;
 	delete[] buf;
 	RemoveBOMFromString(fileContent);
-	auto match = reu::Search(fileContent, "^([0-9]+)x([0-9]+)\\r{0,1}\\n\\[(.+)\\]\\r{0,1}\\n");
+	auto match = reu::Search(fileContent, "^([0-9]+)x([0-9]+)\\r{0,1}\\n\\[(.*)\\]\\r{0,1}\\n");
 	if (!match.IsMatching())
 		throw std::runtime_error("Font file has invalid format");
 
 	_width = std::atoi(match[1].c_str());
 	_height = std::atoi(match[2].c_str());
-	std::string seq = match[3];
-
-	if (!reu::IsMatching(seq, "^[0-9a-fA-Fx\\ \\,\\-]+$"))
-		throw std::runtime_error("Font alphabet sequence has invalid format");
-
-	seq.erase(remove_if(seq.begin(), seq.end(), isspace), seq.end());
-	std::stringstream ss;
-	std::string str;
-
-	auto str2uch = [](const std::string& str) ->utf8char_t
-	{
-		utf8char_t ch;
-		if (reu::IsMatching(str, "^([0-9]+)$"))
-			ch = std::atoi(str.c_str());
-		else
-		{
-			std::stringstream conv;
-			conv << std::hex << str;
-			conv >> ch;
-		}
-		return ch;
-	};
-
-	bool utf8 = false;
-	ss << seq;
-	while (std::getline(ss, str, ',')) 
-	{
-		if (str.empty())
-			continue;
-
-		auto m = reu::Search(str, "^([0-9a-fA-Fx]+)\\-([0-9a-fA-Fx]+)$");
-		if (m.IsMatching())
-		{
-			utf8char_t lower = str2uch(m[1]);
-			utf8char_t higher = str2uch(m[2]);
-			if (lower > higher)
-			{
-				utf8char_t t = lower;
-				lower = higher;
-				higher = t;
-			}
-
-			if (higher > 255)
-				utf8 = true;
-
-			for (utf8char_t i = lower; i <= higher; i++)
-				_seq.push_back(i);
-		}
-		else if (reu::IsMatching(str, "^([0-9a-fA-Fx]+)$"))
-		{
-			auto ch = str2uch(str);
-			if (ch > 255)
-				utf8 = true;
-			_seq.push_back(str2uch(str));
-		}
-		else
-			throw std::runtime_error("Font alphabet sequence has invalid format");
-	}	
 
 	for (size_t i = match.End() + 1; i < fileContent.length(); i++)
 		_dict.push_back(fileContent[i] == '0' ? 0 : 1);
 
+	auto count = _dict.size() / (_width * _height);
+
+	if (count == 0)
+		throw std::runtime_error("Font character count is zero");
+	_parseSequence(match[3], count);
+
 	if (_dict.size() % (_width * _height) != 0)
 		throw std::runtime_error("Font is corrupted or has wrong resolution");
 
-	auto count = _dict.size() / (_width * _height);
-	if (_seq.empty() && count != 256)
-		throw std::runtime_error("Font character count mismatch, expected full ASCII representation");
-
-	if (!_seq.empty() && count != _seq.size())
+	if (count != _seq.size())
 		throw std::runtime_error("Font character count mismatch");
 }
 
@@ -116,19 +60,12 @@ Font::Font(const std::vector<unsigned char>& dict, int h, int w, const std::stri
 	if (seq.empty() && count != 256)
 		throw std::runtime_error("Font character count mismatch, expected full ASCII representation");
 
-	if (utf8)
-	{
-		if (!seq.empty() && count != strlen_utf8(seq))
-			throw std::runtime_error("Font character count mismatch");
-	}
-	else
-	{
-		if (!seq.empty() && count != seq.length())
-			throw std::runtime_error("Font character count mismatch");
-	}
+	if (count == 0)
+		throw std::runtime_error("Font character count is zero");
+	_parseSequence(seq, count);
 
-	for (auto& c : seq)
-		_seq.push_back(c);
+	if (count != _seq.size())
+		throw std::runtime_error("Font character count mismatch");
 
 	for (auto& c : dict)
 		_dict.push_back(c == '0' ? 0 : 1);
@@ -183,6 +120,73 @@ Font& Font::operator=(const Font& copy)
 
 Font::~Font()
 {
+}
+
+void Font::_parseSequence(std::string seq, size_t count)
+{
+	if (seq.empty())
+	{
+		for (utf8char_t i = 0; i < count; i++)
+			_seq.push_back(i);
+		return;
+	}
+
+	if (!reu::IsMatching(seq, "^[0-9a-fA-Fx\\ \\,\\-]+$"))
+		throw std::runtime_error("Font alphabet sequence has invalid format");
+
+	seq.erase(remove_if(seq.begin(), seq.end(), isspace), seq.end());
+	std::stringstream ss;
+	std::string str;
+
+	auto str2uch = [](const std::string& str) ->utf8char_t
+	{
+		utf8char_t ch;
+		if (reu::IsMatching(str, "^([0-9]+)$"))
+			ch = std::atoi(str.c_str());
+		else
+		{
+			std::stringstream conv;
+			conv << std::hex << str;
+			conv >> ch;
+		}
+		return ch;
+	};
+
+	bool utf8 = false;
+	ss << seq;
+	while (std::getline(ss, str, ','))
+	{
+		if (str.empty())
+			continue;
+
+		auto m = reu::Search(str, "^([0-9a-fA-Fx]+)\\-([0-9a-fA-Fx]+)$");
+		if (m.IsMatching())
+		{
+			utf8char_t lower = str2uch(m[1]);
+			utf8char_t higher = str2uch(m[2]);
+			if (lower > higher)
+			{
+				utf8char_t t = lower;
+				lower = higher;
+				higher = t;
+			}
+
+			if (higher > 255)
+				utf8 = true;
+
+			for (utf8char_t i = lower; i <= higher; i++)
+				_seq.push_back(i);
+		}
+		else if (reu::IsMatching(str, "^([0-9a-fA-Fx]+)$"))
+		{
+			auto ch = str2uch(str);
+			if (ch > 255)
+				utf8 = true;
+			_seq.push_back(str2uch(str));
+		}
+		else
+			throw std::runtime_error("Font alphabet sequence has invalid format");
+	}
 }
 
 int Font::GetHeight() const
@@ -271,7 +275,7 @@ bitmap_t Font::GetLetterImage_8bit(utf8char_t ch) const
 		}
 		if (found)
 			return letter;
-		
+
 
 		if (!skip_retry)
 		{
@@ -287,7 +291,7 @@ bitmap_t Font::GetLetterImage_8bit(utf8char_t ch) const
 	custom_seq_loop:
 		for (size_t i = 0; i < _seq.size(); i++)
 		{
-			if (_seq[i] == (char)ch)
+			if (_seq[i] == (unsigned char)ch)
 			{
 				size_t q = 0;
 				for (size_t y = 0; y < letter.size(); y++)
@@ -362,7 +366,7 @@ bitmap_t Font::getFontTable(int maxColumn) const
 			}
 		}
 	}
-	 
+
 	return font;
 }
 

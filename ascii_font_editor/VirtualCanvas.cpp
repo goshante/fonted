@@ -45,7 +45,7 @@ VirtualCanvas::Dims VirtualCanvas::DrawTextRegular(const Font& font, const std::
 	for (size_t i = 0; i < text.length(); i++)
 	{
 		char c = text[i];
-		auto letter = font.GetLetterImage_8bit(c);
+		auto letter = font.GetLetterImage_8bit((unsigned char)c);
 		if (letter.empty())
 			continue;
 

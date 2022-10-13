@@ -3,6 +3,7 @@
 #define GLFW_EXPOSE_NATIVE_WIN32
 #include <GLFW/glfw3native.h>
 #include "MenuFont.h"
+#include <sstream>
 
 #define Min(a,b) (a < b ? a : b)
 
@@ -35,6 +36,7 @@ Canvas::Canvas(int w, int h, int scale, const std::string& title, bool startHidd
 	, _lastDrawCall(std::chrono::system_clock::now())
 	, _initialROPos(0.0f)
 	, _opacity(1.0f)
+	, _enableHelper(false)
 {
 	InitBitmap(_frame, _height, _width);
 	if (!_closed)
@@ -276,7 +278,10 @@ void Canvas::_redrawMenu()
 	auto openDims = _menuFrame.DrawTextRegular(_menuFont, "Open", 5 + newDims.b_x, 1, 1, _lastButton == MenuButtons::Open);
 	auto saveDims = _menuFrame.DrawTextRegular(_menuFont, "Save", 5 + openDims.b_x, 1, 1, _lastButton == MenuButtons::Save);
 	auto markerDims = _menuFrame.DrawRect(4 + saveDims.b_x, 4, 4 + saveDims.b_x + 8, 4 + 8, _regulatingOpacity ? 5 : (_useMarker ? 3 : 4));
-	//_menuFrame.DrawTextRegular(_menuFont, "By Goshante", 78 + markerDims.b_x, 1, 2);
+
+	std::stringstream ss;
+	ss << "[" << _pointX << "|" << _pointY << "]";
+	_menuFrame.DrawTextRegular(_menuFont, ss.str(), 6 + markerDims.b_x, 1, 2);
 
 	if (!firstDraw)
 	{
@@ -353,8 +358,23 @@ void Canvas::_draw()
 
 			auto copy = _frame;
 			auto menu = _menuFrame.GetBitmap();
+
+			auto calculateHelperColor = [](pixel_t px) -> pixel_t
+			{
+				return (px == 3 || px == 5) ? px : (px == 1 ? 7 : 6);
+			};
+
+			if (_enableHelper)
+			{
+				for (size_t y = 0; y < copy.size(); y++)
+					copy[y][_pointX] = calculateHelperColor(copy[y][_pointX]);
+				for (size_t x = 0; x < copy[0].size(); x++)
+					copy[_pointY][x] = calculateHelperColor(copy[_pointY][x]);
+			}
+
 			if (_useMarker)
 				copy[_pointY][_pointX] = copy[_pointY][_pointX] == 0 ? 2 : 4;
+
 			_lock.unlock();
 			bmpUpscaleLinear(copy, _scale);
 			bmpUpscaleLinear(menu, _scale);
@@ -387,11 +407,15 @@ void Canvas::_draw()
 					else if (copy[y][x] == 2)
 						_pw->setPixel(x, y + MenuHeight * _scale, 0xFF00FF00);
 					else if (copy[y][x] == 3)
-						_pw->setPixel(x, y + MenuHeight * _scale, 0xFF0000FF);
+						_pw->setPixel(x, y + MenuHeight * _scale, 0xFF0000BA);
 					else if (copy[y][x] == 4)
 						_pw->setPixel(x, y + MenuHeight * _scale, 0xFF008800);
 					else if (copy[y][x] == 5)
 						_pw->setPixel(x, y + MenuHeight * _scale, 0x55555555);
+					else if (copy[y][x] == 6)
+						_pw->setPixel(x, y + MenuHeight * _scale, 0xFF000055);
+					else if (copy[y][x] == 7)
+						_pw->setPixel(x, y + MenuHeight * _scale, 0xFFCC95AC);
 				}
 			}
 
@@ -512,8 +536,9 @@ void Canvas::CopyCell(int h, int w, int count)
 					for (size_t xx = 0; xx < w; xx++)
 						_copiedCell[yy][xx] = _frame[y + yy][x + xx];
 				}
-				cc++;
 			}
+
+			cc++;
 		}
 	}
 }
@@ -540,8 +565,14 @@ void Canvas::PasteCell(int h, int w, int count)
 					for (size_t xx = 0; xx < w; xx++)
 						_frame[y + yy][x + xx] = _copiedCell[yy][xx];
 				}
-				cc++;
 			}
+
+			cc++;
 		}
 	}
+}
+
+void Canvas::SwitchHelper()
+{
+	_enableHelper = !_enableHelper;
 }

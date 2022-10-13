@@ -130,6 +130,9 @@ bool Application::ProcessEventLoop()
 		if (GetAsyncKeyState(0x56) & 0x01) //V
 			_canvas->PasteCell(_chH, _chW, _chars);
 
+		if (GetAsyncKeyState(0x46) & 0x01) //F
+			_canvas->SwitchHelper();
+
 		return true;
 	}
 

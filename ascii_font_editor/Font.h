@@ -12,6 +12,8 @@ private:
 	std::vector<utf8char_t>			_seq;	//Empty associated char sequence means font is 0-255 ASCII representation
 	bool							_utf8;
 
+	void _parseSequence(std::string seq, size_t count);
+
 public:
 	Font(const std::string& pathToTxtFont);
 	Font(const std::vector<unsigned char>& dict, int h, int w, const std::string& seq = "", bool utf8 = false);
