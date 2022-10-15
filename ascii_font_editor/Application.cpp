@@ -1,7 +1,8 @@
 #include "Application.h"
 #include "Font.h"
 #include "version.h"
-
+#include "FontTestWindow.h"
+#include <thread>
 #include <sstream>
 
 #define IDS_NEWWND						200
@@ -10,7 +11,9 @@
 #define IDS_CHARC						203
 #define IDS_CHARH						204
 #define IDS_CHARW						205
-#define IDS_BTNCREATE					206
+#define IDS_CHARI						206
+#define IDS_CHSEQ						207
+#define IDS_BTNCREATE					208
 
 void MouseEvent(Canvas& canv, pw::mpos pos, int button, int action, int modes)
 {
@@ -29,10 +32,40 @@ void MouseEvent(Canvas& canv, pw::mpos pos, int button, int action, int modes)
 
 void MenuEvent(Canvas& canv, Canvas::MenuButtons btn)
 {
+	std::vector<unsigned char> dict;
+	std::string str;
+	std::thread t;
+
 	switch (btn)
 	{
 	case Canvas::MenuButtons::New:
 		canv.GetOwner<Application>()->_showNewWnd();
+		break;
+
+	case Canvas::MenuButtons::TestFont:
+		EnableWindow(canv.GetHWND(), FALSE);
+		str = canv.GetOwner<Application>()->_makeFontDict();
+		for (char c : str)
+			dict.push_back(c);
+		t = std::thread([&]()
+		{
+			FontTestWindow
+			(
+				Font(	
+						dict, 
+						canv.GetOwner<Application>()->_chH, 
+						canv.GetOwner<Application>()->_chW, 
+						canv.GetOwner<Application>()->_fontInterval, 
+						canv.GetOwner<Application>()->_fontSeq
+				    ), 
+					"The quick brown fox jumps over the lazy dog.", 
+					"—ъешь ещЄ этих м€гких французских булок, да выпей чаю, жопа.",
+					"1 2 3 4 5 6 7 8 9 0",
+					"\" ' ~{ } ` [ ] !?.,:; @#$%^&*-_=+ ( ) \\ / < >"
+			);
+		});
+		t.join();
+		EnableWindow(canv.GetHWND(), TRUE);
 		break;
 
 	case Canvas::MenuButtons::Open:
@@ -82,13 +115,14 @@ Application::Application()
 	, _chars(256)
 	, _chW(5)
 	, _chH(11)
+	, _fontInterval(0)
 {
 	Font font = Font::makeEmptyFont(_chH, _chW, _chars);
 	auto fbmp = font.getFontTable(_columns);
 	_fontSeq.resize(_chars);
 	for (utf8char_t i = 0; i < (utf8char_t)_chars; i++)
 		_fontSeq[i] = i;
-	_canvas = std::make_unique<Canvas>(int(fbmp[0].size()), int(fbmp.size()), _scale, (std::string("ASCII font editor ") + VERSION + " by Goshante").c_str(), false, 0xFFFFFF00);
+	_canvas = std::make_unique<Canvas>(int(fbmp[0].size()), int(fbmp.size()), _scale, (std::string("Pixel Font Editor ") + VERSION + " by Goshante").c_str(), false, 0xFFFFFF00);
 	_canvas->SetOwner(this);
 	_canvas->SetPicture(fbmp);
 	_canvas->SetCanvasCallback(&MouseEvent);
@@ -141,17 +175,20 @@ bool Application::ProcessEventLoop()
 
 LRESULT CALLBACK NewWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-	HWND btn, cols, scale, chars, charw, charh;
+	HWND btn, cols, scale, chars, charw, charh, chari, hseq;
 	Application* app = reinterpret_cast<Application*>(GetWindowLongPtr(hWnd, GWLP_USERDATA));
 	cols = GetDlgItem(hWnd, IDS_COLUMNS);
 	scale = GetDlgItem(hWnd, IDS_UISCALE);
 	chars = GetDlgItem(hWnd, IDS_CHARC);
 	charw = GetDlgItem(hWnd, IDS_CHARW);
 	charh = GetDlgItem(hWnd, IDS_CHARH);
+	chari = GetDlgItem(hWnd, IDS_CHARI);
+	hseq = GetDlgItem(hWnd, IDS_CHSEQ);
 	btn = GetDlgItem(hWnd, IDS_BTNCREATE);
 	auto wp = LOWORD(wParam);
 
-	int iCol, iScale, iCharC, iCharW, iCharH;
+	int iCol, iScale, iCharC, iCharW, iCharH, iCharI;
+	std::string seq;
 	char buf[32];
 	GetWindowTextA(cols, buf, sizeof(buf));
 	iCol = std::atoi(buf);
@@ -163,6 +200,10 @@ LRESULT CALLBACK NewWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 	iCharW = std::atoi(buf);
 	GetWindowTextA(charh, buf, sizeof(buf));
 	iCharH = std::atoi(buf);
+	GetWindowTextA(chari, buf, sizeof(buf));
+	iCharI = std::atoi(buf);
+	GetWindowTextA(hseq, buf, sizeof(buf));
+	seq = buf;
 
 	switch (uMsg)
 	{
@@ -177,7 +218,7 @@ LRESULT CALLBACK NewWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 		switch (wp)
 		{
 		case IDS_BTNCREATE:
-			if (app->_createWorkspace(hWnd, iCol, iCharH, iCharW, iCharC, iScale))
+			if (app->_createWorkspace(hWnd, seq, iCol, iCharH, iCharW, iCharI, iCharC, iScale))
 			{
 				CloseWindow(hWnd);
 				PostMessage(hWnd, WM_QUIT, 0, 0);
@@ -201,8 +242,8 @@ void Application::_showNewWnd()
 	wc.hbrBackground = (HBRUSH)COLOR_WINDOW;
 	wc.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDS_NEWWND));
 
-	int width = 220;
-	int height = 140;
+	int width = 236;
+	int height = 210;
 	int xPos = (GetSystemMetrics(SM_CXSCREEN) - width) / 2;
 	int yPos = (GetSystemMetrics(SM_CYSCREEN) - height) / 2;
 	HWND parent = _canvas->GetHWND();
@@ -210,7 +251,7 @@ void Application::_showNewWnd()
 	RegisterClassW(&wc);
 	EnableWindow(parent, FALSE);
 	HWND hwnd = CreateWindowExW(
-		NULL,
+		WS_EX_DLGMODALFRAME,
 		CLASS_NAME,
 		L"New workspace",
 		WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_POPUP | WS_CLIPCHILDREN,
@@ -230,19 +271,26 @@ void Application::_showNewWnd()
 	//Begin constructing window
 	int ox = 10, oy = 4;
 	CreateWindowElement(hwnd, ET_STATIC, "Columns:", hInstance, WS_VISIBLE, NULL, NULL, ox, oy, 125, 20, false);
-	CreateWindowElement(hwnd, ET_STATIC, "UI Scale:", hInstance, WS_VISIBLE, NULL, NULL, ox + 60, oy, 125, 20, false);
-	CreateWindowElement(hwnd, ET_STATIC, "Characters:", hInstance, WS_VISIBLE, NULL, NULL, ox + 60 * 2, oy, 125, 20, false);
+	CreateWindowElement(hwnd, ET_STATIC, "UI Scale:", hInstance, WS_VISIBLE, NULL, NULL, ox + 60 + 2, oy, 125, 20, false);
+	CreateWindowElement(hwnd, ET_STATIC, "Chars:", hInstance, WS_VISIBLE, NULL, NULL, ox + 60 * 2 + 2, oy, 125, 20, false);
 	oy += 17;
-	CreateWindowElement(hwnd, ET_EDIT, "24", hInstance, WS_VISIBLE | WS_BORDER | WS_TABSTOP, ES_NUMBER, HMENU(IDS_COLUMNS), ox, oy, 30, 23, false);
-	CreateWindowElement(hwnd, ET_EDIT, "3", hInstance, WS_VISIBLE | WS_BORDER | WS_TABSTOP, ES_NUMBER, HMENU(IDS_UISCALE), ox + 60, oy, 30, 23, false);
-	CreateWindowElement(hwnd, ET_EDIT, "256", hInstance, WS_VISIBLE | WS_BORDER | WS_TABSTOP, ES_NUMBER, HMENU(IDS_CHARC), ox + 60 * 2, oy, 30, 23, false);
+	CreateWindowElement(hwnd, ET_EDIT, "24", hInstance, WS_VISIBLE | WS_BORDER | WS_TABSTOP, NULL, HMENU(IDS_COLUMNS), ox, oy, 30, 23, false);
+	CreateWindowElement(hwnd, ET_EDIT, "3", hInstance, WS_VISIBLE | WS_BORDER | WS_TABSTOP, NULL, HMENU(IDS_UISCALE), ox + 60 + 2, oy, 30, 23, false);
+	CreateWindowElement(hwnd, ET_EDIT, "256", hInstance, WS_VISIBLE | WS_BORDER | WS_TABSTOP, NULL, HMENU(IDS_CHARC), ox + 60 * 2 + 2, oy, 30, 23, false);
 	oy += 25;
 	CreateWindowElement(hwnd, ET_STATIC, "Char W:", hInstance, WS_VISIBLE, NULL, NULL, ox, oy, 125, 20, false);
-	CreateWindowElement(hwnd, ET_STATIC, "Char H:", hInstance, WS_VISIBLE, NULL, NULL, ox + 60, oy, 125, 20, false);
+	CreateWindowElement(hwnd, ET_STATIC, "Char H:", hInstance, WS_VISIBLE, NULL, NULL, ox + 60 + 2, oy, 125, 20, false);
+	CreateWindowElement(hwnd, ET_STATIC, "Interval:", hInstance, WS_VISIBLE, NULL, NULL, ox + 60 * 2 + 2, oy, 125, 20, false);
 	oy += 17;
-	CreateWindowElement(hwnd, ET_EDIT, "8", hInstance, WS_VISIBLE | WS_BORDER | WS_TABSTOP, ES_NUMBER, HMENU(IDS_CHARW), ox, oy, 30, 23, false);
-	CreateWindowElement(hwnd, ET_EDIT, "14", hInstance, WS_VISIBLE | WS_BORDER | WS_TABSTOP, ES_NUMBER, HMENU(IDS_CHARH), ox + 60, oy, 30, 23, false);
-	CreateWindowElement(hwnd, ET_BUTTON, "Create", hInstance, WS_VISIBLE | WS_TABSTOP | BS_FLAT, NULL, HMENU(IDS_BTNCREATE), ox + 60 * 2, oy - 1, 60, 25, false);
+	CreateWindowElement(hwnd, ET_EDIT, "8", hInstance, WS_VISIBLE | WS_BORDER | WS_TABSTOP, NULL, HMENU(IDS_CHARW), ox, oy, 30, 23, false);
+	CreateWindowElement(hwnd, ET_EDIT, "14", hInstance, WS_VISIBLE | WS_BORDER | WS_TABSTOP, NULL, HMENU(IDS_CHARH), ox + 60 + 2, oy, 30, 23, false);
+	CreateWindowElement(hwnd, ET_EDIT, "1", hInstance, WS_VISIBLE | WS_BORDER | WS_TABSTOP, NULL, HMENU(IDS_CHARI), ox + 60 * 2 + 2, oy, 30, 23, false);
+	oy += 25;
+	CreateWindowElement(hwnd, ET_STATIC, "Char enum (e.g: [0x20, 113-217, 0xF1]):", hInstance, WS_VISIBLE, NULL, NULL, ox, oy, 230, 20, false);
+	oy += 17;
+	CreateWindowElement(hwnd, ET_EDIT, "0-255", hInstance, WS_VISIBLE | WS_BORDER | WS_TABSTOP, NULL, HMENU(IDS_CHSEQ), ox, oy, 200, 23, false);
+	oy += 32;
+	CreateWindowElement(hwnd, ET_BUTTON, "Create", hInstance, WS_VISIBLE | WS_TABSTOP | BS_FLAT, NULL, HMENU(IDS_BTNCREATE), ox - 1, oy, 202, 25, false);
 
 	SetWindowLongPtr(hwnd, GWLP_USERDATA, (LONG_PTR)this);
 	auto a = GetWindowLongPtr(hwnd, GWLP_USERDATA);
@@ -259,7 +307,7 @@ void Application::_showNewWnd()
 	DestroyWindow(hwnd);
 }
 
-bool Application::_createWorkspace(HWND hwnd, int col, int h, int w, int count, int scale)
+bool Application::_createWorkspace(HWND hwnd, const std::string& sequence, int col, int h, int w, int interval, int count, int scale)
 {
 	auto errBox = [&hwnd](const std::string& msg)
 	{
@@ -302,19 +350,55 @@ bool Application::_createWorkspace(HWND hwnd, int col, int h, int w, int count, 
 		return false;
 	}
 
-	_scale = scale;
-	_chars = count;
-	_columns = col;
-	_chH = h;
-	_chW = w;
-	_fontSeq.resize(_chars);
-	for (utf8char_t i = 0; i < (utf8char_t)_chars; i++)
-		_fontSeq[i] = i;
-	Font emptyFont = Font::makeEmptyFont(h, w, count);
-	auto pic = emptyFont.getFontTable(col);
-	_canvas->ReInit(pic, (int)pic[0].size(), (int)pic.size(), scale);
+	try
+	{
+		_scale = scale;
+		_chars = count;
+		_columns = col;
+		_chH = h;
+		_chW = w;
+		_fontInterval = interval;
+		Font emptyFont = Font::makeEmptyFont(h, w, count, sequence);
+		_fontSeq = emptyFont.GetAllSupportedChars();
+		auto pic = emptyFont.getFontTable(col);
+		_canvas->ReInit(pic, (int)pic[0].size(), (int)pic.size(), scale);
+	}
+	catch (const std::exception& ex)
+	{
+		errBox(ex.what());
+		return false;
+	}
 
 	return true;
+}
+
+std::string Application::_makeFontDict()
+{
+	auto font = _canvas->GetPicture();
+	std::string str;
+	int cc = 0;
+	for (size_t y = 0; y < font.size(); y += _chH + 1)
+	{
+		for (size_t x = 0; x < font[0].size(); x += _chW + 1)
+		{
+			if (cc >= _chars)
+				break;
+
+			for (size_t yy = 0; yy < _chH; yy++)
+			{
+				for (size_t xx = 0; xx < _chW; xx++)
+				{
+					pixel_t px = font[y + yy][x + xx];
+					if (px == 0)
+						str += "0";
+					else
+						str += "1";
+				}
+			}
+			cc++;
+		}
+	}
+	return str;
 }
 
 void Application::_saveFont(const std::string& path)
@@ -374,31 +458,9 @@ void Application::_saveFont(const std::string& path)
 			ss << ", ";
 		ss << intervals[i];
 	}
-	ss << "]\n";
-	auto font = _canvas->GetPicture();
-
-	int cc = 0;
-	for (size_t y = 0; y < font.size(); y += _chH + 1)
-	{
-		for (size_t x = 0; x < font[0].size(); x += _chW + 1)
-		{
-			if (cc >= _chars)
-				break;
-
-			for (size_t yy = 0; yy < _chH; yy++)
-			{
-				for (size_t xx = 0; xx < _chW; xx++)
-				{
-					pixel_t px = font[y + yy][x + xx];
-					if (px == 0)
-						ss << '0';
-					else
-						ss << '1';
-				}
-			}
-			cc++;
-		}
-	}
+	ss << "]\n" << "i" << _fontInterval << "\n";
+	
+	ss << _makeFontDict();
 
 	HANDLE hFile = CreateFileA(path.c_str(), GENERIC_WRITE,
 		FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
@@ -424,5 +486,6 @@ void Application::_loadFont(const std::string& path)
 	_chars = (int)_fontSeq.size();
 	_chW = font.GetWidth();
 	_chH = font.GetHeight();
+	_fontInterval = font.GetInterval();
 	_canvas->ReInit(table, (int)table[0].size(), (int)table.size(), _scale);
 }

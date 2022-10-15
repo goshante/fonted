@@ -25,12 +25,19 @@ Font::Font(const std::string& pathToTxtFont)
 	std::string fileContent = buf;
 	delete[] buf;
 	RemoveBOMFromString(fileContent);
-	auto match = reu::Search(fileContent, "^([0-9]+)x([0-9]+)\\r{0,1}\\n\\[(.*)\\]\\r{0,1}\\n");
+	auto match = reu::Search(fileContent, "^([0-9]+)x([0-9]+)\\r{0,1}\\n\\[(.+)\\]\\r{0,1}\\ni([0-9]{1,2})\\r{0,1}\\n");
 	if (!match.IsMatching())
 		throw std::runtime_error("Font file has invalid format");
 
 	_width = std::atoi(match[1].c_str());
 	_height = std::atoi(match[2].c_str());
+	_interval = std::atoi(match[4].c_str());
+
+	if (_width <= 0 || _height <= 0)
+		throw std::runtime_error("Invalid font resolution");
+
+	if (_interval < 0 || _interval > _width)
+		throw std::runtime_error("Invalid interval value");
 
 	for (size_t i = match.End() + 1; i < fileContent.length(); i++)
 		_dict.push_back(fileContent[i] == '0' ? 0 : 1);
@@ -45,54 +52,64 @@ Font::Font(const std::string& pathToTxtFont)
 		throw std::runtime_error("Font is corrupted or has wrong resolution");
 
 	if (count != _seq.size())
-		throw std::runtime_error("Font character count mismatch");
+		throw std::runtime_error("Font character count not matching font character sequence.");
 }
 
-Font::Font(const std::vector<unsigned char>& dict, int h, int w, const std::string& seq, bool utf8)
+Font::Font(const std::vector<unsigned char>& dict, int h, int w, int interval, const std::string& seq, bool utf8)
 	: _height(h)
 	, _width(w)
+	, _interval(interval)
 	, _utf8(utf8)
 {
+	if (w <= 0 || h <= 0)
+		throw std::runtime_error("Invalid font resolution");
+
 	if (dict.size() % (_width * _height) != 0)
 		throw std::runtime_error("Font is corrupted or has wrong resolution");
 
+	if (interval < 0 || interval > w)
+		throw std::runtime_error("Invalid interval value");
+
 	auto count = dict.size() / (_width * _height);
-	if (seq.empty() && count != 256)
-		throw std::runtime_error("Font character count mismatch, expected full ASCII representation");
 
 	if (count == 0)
 		throw std::runtime_error("Font character count is zero");
 	_parseSequence(seq, count);
 
 	if (count != _seq.size())
-		throw std::runtime_error("Font character count mismatch");
+		throw std::runtime_error("Font character count not matching font character sequence.");
 
 	for (auto& c : dict)
 		_dict.push_back(c == '0' ? 0 : 1);
 }
 
-Font::Font(const std::vector<unsigned char>& dict, int h, int w, const std::vector<utf8char_t>& seq, bool utf8)
+Font::Font(const std::vector<unsigned char>& dict, int h, int w, int interval, const std::vector<utf8char_t>& seq, bool utf8)
 	: _height(h)
 	, _width(w)
+	, _interval(interval)
 	, _seq(seq)
 	, _utf8(utf8)
 {
+	if (w <= 0 || h <= 0)
+		throw std::runtime_error("Invalid font resolution");
+
 	if (dict.size() % (_width * _height) != 0)
 		throw std::runtime_error("Font is corrupted or has wrong resolution");
 
+	if (interval < 0 || interval > w)
+		throw std::runtime_error("Invalid interval value");
+
 	auto count = dict.size() / (_width * _height);
-	if (seq.empty() && count != 256)
-		throw std::runtime_error("Font character count mismatch, expected full ASCII representation");
 
 	if (utf8)
 	{
 		if (!seq.empty() && count != seq.size())
-			throw std::runtime_error("Font character count mismatch");
+			throw std::runtime_error("Font character count not matching font character sequence.");
 	}
 	else
 	{
 		if (!seq.empty() && count != seq.size())
-			throw std::runtime_error("Font character count mismatch");
+			throw std::runtime_error("Font character count not matching font character sequence.");
 	}
 
 	for (auto& c : dict)
@@ -126,9 +143,9 @@ void Font::_parseSequence(std::string seq, size_t count)
 {
 	if (seq.empty())
 	{
-		for (utf8char_t i = 0; i < count; i++)
-			_seq.push_back(i);
-		return;
+		std::stringstream ss;
+		ss << 0 << "-" << count - 1;
+		seq = ss.str();
 	}
 
 	if (!reu::IsMatching(seq, "^[0-9a-fA-Fx\\ \\,\\-]+$"))
@@ -199,23 +216,71 @@ int Font::GetWidth() const
 	return _width;
 }
 
-Font Font::makeEmptyFont(int h, int w, int count)
+Font Font::makeEmptyFont(int h, int w, int count, const std::string& seq)
 {
 	std::vector<pixel_t> emptyFontDict(h * w * count);
 	for (auto& c : emptyFontDict)
 		c = '0';
-	std::string seq;
-	if (count < 256)
-	{
-		for (unsigned char c = 0; c < count; c++)
-			seq.push_back(c == 0 ? 1 : c);
-	}
-	return Font(emptyFontDict, h, w, seq);
+	return Font(emptyFontDict, h, w, 0, seq);
 }
 
 //Each pixel is a byte
-bitmap_t Font::GetLetterImage_8bit(utf8char_t ch) const
+bitmap_t Font::GetCharImage_8bit(utf8char_t ch, bool monospace) const
 {
+	auto adaptiveSpace = [](bitmap_t& ch)
+	{
+		int emptyFirst = 0, emptyLast = 0;
+		bool br = false;
+		for (size_t x = 0; x < ch[0].size(); x++)
+		{
+			for (size_t y = 0; y < ch.size(); y++)
+			{
+				if (ch[y][x] != 0)
+				{
+					br = true;
+					break;
+				}
+			}
+			if (br)
+				break;
+
+			emptyFirst++;
+		}
+
+		if (emptyFirst == ch[0].size()) //Allow full empty characters
+			return;
+
+		br = false;
+		for (size_t x = ch[0].size() - 1; x < size_t(-1); x--)
+		{
+			for (size_t y = 0; y < ch.size(); y++)
+			{
+				if (ch[y][x] != 0)
+				{
+					br = true;
+					break;
+				}
+			}
+
+			if (br)
+				break;
+
+			emptyLast++;
+		}
+
+		for (size_t x = 0; x < emptyFirst; x++)
+		{
+			for (size_t y = 0; y < ch.size(); y++)
+				ch[y].erase(ch[y].begin());
+		}
+
+		for (size_t x = 0; x < emptyLast; x++)
+		{
+			for (size_t y = 0; y < ch.size(); y++)
+				ch[y].erase(ch[y].end()-1);
+		}
+	};
+
 	bitmap_t letter;
 	InitBitmap(letter, _height, _width);
 	size_t letterSize = _width * _height;
@@ -237,6 +302,8 @@ bitmap_t Font::GetLetterImage_8bit(utf8char_t ch) const
 						q++;
 					}
 				}
+				if (!monospace)
+					adaptiveSpace(letter);
 				return letter;
 			}
 		}
@@ -274,7 +341,11 @@ bitmap_t Font::GetLetterImage_8bit(utf8char_t ch) const
 			}
 		}
 		if (found)
+		{
+			if (!monospace)
+				adaptiveSpace(letter);
 			return letter;
+		}
 
 
 		if (!skip_retry)
@@ -302,6 +373,8 @@ bitmap_t Font::GetLetterImage_8bit(utf8char_t ch) const
 						q++;
 					}
 				}
+				if (!monospace)
+					adaptiveSpace(letter);
 				return letter;
 			}
 		}
@@ -380,10 +453,15 @@ size_t Font::CharCount() const
 
 bitmap_t Font::operator[](utf8char_t ch) const
 {
-	return GetLetterImage_8bit(ch);
+	return GetCharImage_8bit(ch);
 }
 
 std::vector<utf8char_t> Font::GetAllSupportedChars() const
 {
 	return _seq;
+}
+
+int Font::GetInterval() const
+{
+	return _interval;
 }

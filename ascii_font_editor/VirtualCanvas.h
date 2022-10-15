@@ -26,8 +26,11 @@ public:
 
 	bitmap_t GetBitmap() const;
 
-	Dims DrawTextRegular(const Font& font, const std::string& text, int off_x, int off_y, int brush = 1, bool invert = false);
+	Dims DrawTextRegular(const Font& font, const std::string& text, int off_x, int off_y, int brush = 1, bool invert = false, bool monospace = false);
 	Dims DrawRect(int a_x, int a_y, int b_x, int b_y, int brush);
 	void Clear();
 	void ReInit(int w, int h);
+
+	const std::vector<pixel_t>& operator[](size_t i) const;
+	const size_t size() const;
 };

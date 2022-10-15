@@ -14,6 +14,7 @@ private:
 	int _chars;
 	int _chW;
 	int _chH;
+	int _fontInterval;
 	std::vector<utf8char_t> _fontSeq;
 
 	Application(Application&) = delete;
@@ -25,9 +26,10 @@ private:
 	friend LRESULT CALLBACK NewWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
 	void _showNewWnd();
-	bool _createWorkspace(HWND hwnd, int col, int h, int w, int count, int scale);
+	bool _createWorkspace(HWND hwnd, const std::string& sequence, int col, int h, int w, int interval, int count, int scale);
 	void _saveFont(const std::string& path);
 	void _loadFont(const std::string& path);
+	std::string _makeFontDict();
 
 public:
 	Application();

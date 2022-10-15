@@ -1,9 +1,12 @@
+#pragma warning( disable : 4005 )
+
 #include "Canvas.h"
 #include <Windows.h>
 #define GLFW_EXPOSE_NATIVE_WIN32
 #include <GLFW/glfw3native.h>
 #include "MenuFont.h"
 #include <sstream>
+#include "resource.h"
 
 #define Min(a,b) (a < b ? a : b)
 
@@ -27,7 +30,7 @@ Canvas::Canvas(int w, int h, int scale, const std::string& title, bool startHidd
 	, _mc(false)
 	, _clc(false)
 	, _useMarker(true)
-	, _menuFont(getMenuFont(), 14, 8)
+	, _menuFont(getMenuFont(), 14, 8, 1)
 	, _menuFrame(w, MenuHeight)
 	, _lastButton(MenuButtons::None)
 	, _lastMenuClick(std::chrono::system_clock::now())
@@ -153,7 +156,7 @@ void Canvas::Draw(bool erase, bool hold)
 	_holdDraw = hold;
 }
 
-void callbackMouse(void* owner, pw::mpos pos, int button, int action, int modes)
+static void callbackMouse(void* owner, pw::mpos pos, int button, int action, int modes)
 {
 	Canvas* canv = reinterpret_cast<Canvas*>(owner);
 	try
@@ -231,7 +234,7 @@ void callbackMouse(void* owner, pw::mpos pos, int button, int action, int modes)
 	}
 }
 
-bool callbackClose(void* owner)
+static bool callbackClose(void* owner)
 {
 	Canvas* canv = reinterpret_cast<Canvas*>(owner);
 	if (canv->_clc)
@@ -244,7 +247,7 @@ bool callbackClose(void* owner)
 	return false;
 }
 
-void callbackCursor(void* owner, pw::mpos pos)
+static void callbackCursor(void* owner, pw::mpos pos)
 {
 	Canvas* canv = reinterpret_cast<Canvas*>(owner);
 	if (canv->_regulatingOpacity)
@@ -273,11 +276,11 @@ void Canvas::_redrawMenu()
 {
 	static bool firstDraw = false;
 	_menuFrame.Clear();
-	_menuFont = Font(getMenuFont(), 14, 8);
 	auto newDims = _menuFrame.DrawTextRegular(_menuFont, "New", 2, 1, 1, _lastButton == MenuButtons::New);
 	auto openDims = _menuFrame.DrawTextRegular(_menuFont, "Open", 5 + newDims.b_x, 1, 1, _lastButton == MenuButtons::Open);
 	auto saveDims = _menuFrame.DrawTextRegular(_menuFont, "Save", 5 + openDims.b_x, 1, 1, _lastButton == MenuButtons::Save);
 	auto markerDims = _menuFrame.DrawRect(4 + saveDims.b_x, 4, 4 + saveDims.b_x + 8, 4 + 8, _regulatingOpacity ? 5 : (_useMarker ? 3 : 4));
+	auto testDims = _menuFrame.DrawRect(4 + saveDims.b_x, 1, 4 + saveDims.b_x + 8, 3, 6);
 
 	std::stringstream ss;
 	ss << "[" << _pointX << "|" << _pointY << "]";
@@ -289,6 +292,7 @@ void Canvas::_redrawMenu()
 		_menuButtons.push_back(openDims);
 		_menuButtons.push_back(saveDims);
 		_menuButtons.push_back(markerDims);
+		_menuButtons.push_back(testDims);
 		firstDraw = true;
 	}
 }
@@ -309,6 +313,10 @@ void Canvas::_draw()
 		_redrawMenu();
 		_reinit.reset();
 		_copiedCell.clear();
+
+		HICON hIcon = LoadIcon(GetModuleHandle(NULL), MAKEINTRESOURCE(IDI_ICON1));
+		SendMessage(glfwGetWin32Window(_pw->_getHandle()), WM_SETICON, ICON_SMALL, (LPARAM)hIcon);
+		SendMessage(glfwGetWin32Window(_pw->_getHandle()), WM_SETICON, ICON_BIG, (LPARAM)hIcon);
 
 		::SetForegroundWindow(GetHWND());
 		::SetFocus(GetHWND());
@@ -393,6 +401,8 @@ void Canvas::_draw()
 						_pw->setPixel(x, y, 0x55555555);
 					else if (menu[y][x] == 5)
 						_pw->setPixel(x, y, 0xFFFFD6FF);
+					else if (menu[y][x] == 6)
+						_pw->setPixel(x, y, 0xFFFFAAAA);
 					else
 						_pw->setPixel(x, y, 0xFF000044);
 				}

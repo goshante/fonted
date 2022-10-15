@@ -142,6 +142,7 @@
     <ClCompile Include="Application.cpp" />
     <ClCompile Include="Canvas.cpp" />
     <ClCompile Include="Font.cpp" />
+    <ClCompile Include="FontTestWindow.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="reutils.cpp" />
     <ClCompile Include="Utils.cpp" />
@@ -163,6 +164,12 @@
   </ItemGroup>
   <ItemGroup>
     <Manifest Include="ascii_font_editor.manifest" />
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="icon1.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="FontTestWindow.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

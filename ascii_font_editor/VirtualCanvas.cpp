@@ -32,22 +32,43 @@ VirtualCanvas::Dims VirtualCanvas::DrawRect(int a_x, int a_y, int b_x, int b_y, 
 	return { a_x, a_y, b_x, b_y };
 }
 
-VirtualCanvas::Dims VirtualCanvas::DrawTextRegular(const Font& font, const std::string& text, int off_x, int off_y, int brush, bool invert)
+VirtualCanvas::Dims VirtualCanvas::DrawTextRegular(const Font& font, const std::string& text, int off_x, int off_y, int brush, bool invert, bool monospace)
 {
-	int fw = font.GetWidth();
 	int fh = font.GetHeight();
 	Dims dims;
 	dims.a_x = off_x;
 	dims.a_y = off_y;
-	dims.b_x = off_x + (fw * int(text.length()));
+	dims.b_x = off_x;
 	dims.b_y = off_y + fh;
+	int initialX = off_x;
 
+	int cur_row_w = off_x;
 	for (size_t i = 0; i < text.length(); i++)
 	{
 		char c = text[i];
-		auto letter = font.GetLetterImage_8bit((unsigned char)c);
+		auto letter = font.GetCharImage_8bit((unsigned char)c, monospace);
+
 		if (letter.empty())
 			continue;
+
+		int fw = (int)letter[0].size();
+
+		if (c == '\r')
+			continue;
+
+		if (c == '\n')
+		{
+			off_y += 1 + fh;
+			dims.b_y += 1 + fh;
+			
+
+			if (cur_row_w > dims.b_x)
+				dims.b_x = cur_row_w;
+
+			off_x = initialX;
+			cur_row_w = initialX;
+			continue;
+		}
 
 		for (int y = 0; y < fh; y++)
 		{
@@ -63,9 +84,12 @@ VirtualCanvas::Dims VirtualCanvas::DrawTextRegular(const Font& font, const std::
 					_canvas[pos_y][pos_x] = brush;
 			}
 		}
-		off_x += fw;
+		off_x += fw + font.GetInterval();
+		cur_row_w += fw + font.GetInterval();
 	}
 
+	if (dims.b_x == initialX)
+		dims.b_x = cur_row_w;
 	return dims;
 }
 
@@ -79,4 +103,14 @@ void VirtualCanvas::ReInit(int w, int h)
 	_height = h;
 	_width = w;
 	InitBitmap(_canvas, _height, _width);
+}
+
+const std::vector<pixel_t>& VirtualCanvas::operator[](size_t i) const
+{
+	return _canvas[i];
+}
+
+const size_t VirtualCanvas::size() const
+{
+	return _canvas.size();
 }

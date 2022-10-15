@@ -21,6 +21,7 @@ public:
 		Open,
 		Save,
 		MarkerSwitch,
+		TestFont,
 		None
 	};
 
