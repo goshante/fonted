@@ -30,6 +30,40 @@ void MouseEvent(Canvas& canv, pw::mpos pos, int button, int action, int modes)
 	}
 }
 
+void Application::_testFont()
+{
+	if (_testingFont)
+		return;
+
+	if (_testThread)
+		_testThread->join();
+	
+	_testThread = std::make_unique<std::thread>([this]()
+	{
+		auto str = _makeFontDict();
+		std::vector<unsigned char> dict;
+		for (char c : str)
+			dict.push_back(c);
+		FontTestWindow
+		(
+			Font(
+				dict,
+				_chH,
+				_chW,
+				_fontInterval,
+				_fontSeq
+			),
+			_testingFont,
+			"The quick brown fox jumps over the lazy dog.",
+			"—ъешь ещЄ этих м€гких французских булок, да выпей чаю, жопа.",
+			"1 2 3 4 5 6 7 8 9 0 123 456 7890",
+			"\" ' ~{ } ` [ | ] !?.,:; @#$%^&*-_=+ ( ) \\ / < >"
+		);
+		str.clear();
+	});
+}
+
+
 void MenuEvent(Canvas& canv, Canvas::MenuButtons btn)
 {
 	std::vector<unsigned char> dict;
@@ -43,29 +77,7 @@ void MenuEvent(Canvas& canv, Canvas::MenuButtons btn)
 		break;
 
 	case Canvas::MenuButtons::TestFont:
-		EnableWindow(canv.GetHWND(), FALSE);
-		str = canv.GetOwner<Application>()->_makeFontDict();
-		for (char c : str)
-			dict.push_back(c);
-		t = std::thread([&]()
-		{
-			FontTestWindow
-			(
-				Font(	
-						dict, 
-						canv.GetOwner<Application>()->_chH, 
-						canv.GetOwner<Application>()->_chW, 
-						canv.GetOwner<Application>()->_fontInterval, 
-						canv.GetOwner<Application>()->_fontSeq
-				    ), 
-					"The quick brown fox jumps over the lazy dog.", 
-					"—ъешь ещЄ этих м€гких французских булок, да выпей чаю, жопа.",
-					"1 2 3 4 5 6 7 8 9 0",
-					"\" ' ~{ } ` [ ] !?.,:; @#$%^&*-_=+ ( ) \\ / < >"
-			);
-		});
-		t.join();
-		EnableWindow(canv.GetHWND(), TRUE);
+		canv.GetOwner<Application>()->_testFont();
 		break;
 
 	case Canvas::MenuButtons::Open:
@@ -116,6 +128,7 @@ Application::Application()
 	, _chW(5)
 	, _chH(11)
 	, _fontInterval(0)
+	, _testingFont(false)
 {
 	Font font = Font::makeEmptyFont(_chH, _chW, _chars);
 	auto fbmp = font.getFontTable(_columns);
@@ -131,7 +144,9 @@ Application::Application()
 }
 Application::~Application()
 {
-
+	_testingFont = false;
+	if (_testThread)
+		_testThread->join();
 }
 
 bool Application::ProcessEventLoop()

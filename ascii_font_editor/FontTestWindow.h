@@ -1,5 +1,6 @@
 #pragma once
 #include <PixelWindow/PixelWindow.h>
+#include <atomic>
 #include "VirtualCanvas.h"
 
 class Font;
@@ -16,6 +17,8 @@ private:
 	std::string _text;
 	VirtualCanvas _screen;
 	bool _monospace;
+	bool _invert;
+	std::atomic<bool>& _testingFont;
 
 	FontTestWindow(FontTestWindow&) = delete;
 	FontTestWindow& operator=(FontTestWindow&) = delete;
@@ -25,7 +28,8 @@ private:
 	static int _calcWndWidth(const Font& font, const std::string& a, const std::string& b, const std::string& c, const std::string& d);
 
 public:
-	FontTestWindow(const Font& font, const std::string& test, const std::string& testCyr, const std::string& nums, const std::string& special, uint32_t background = 0x00000000, uint32_t foreground = 0xFFFFFFFF);
+	FontTestWindow(const Font& font, std::atomic<bool>& flag, const std::string& test, const std::string& testCyr, const std::string& nums, const std::string& special, uint32_t background = 0x00000000, uint32_t foreground = 0xFFFFFFFF);
 	~FontTestWindow();
 	void SwitchMonospace();
+	void SwitchInvert();
 };

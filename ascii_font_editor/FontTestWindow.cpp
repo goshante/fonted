@@ -14,7 +14,7 @@ static constexpr const int s_hOffset = 50;
 
 void FontTestWindow::_draw()
 {
-	while (_pw.isActive())
+	while (_pw.isActive() && _testingFont)
 	{
 		_pw.makeCurrent();
 		_pw.pollEvents();
@@ -58,19 +58,30 @@ static bool callbackClose(void* owner)
 static void callbackMouse(void* owner, pw::mpos pos, int button, int action, int modes)
 {
 	FontTestWindow* wnd = reinterpret_cast<FontTestWindow*>(owner);
-	if (action != 1 || button != 0)
+	if (action != 1 || button > 1)
 		return;
-	wnd->SwitchMonospace();
+
+	if (button == 0)
+		wnd->SwitchMonospace();
+	else
+		wnd->SwitchInvert();
 }
 
 void FontTestWindow::SwitchMonospace()
 {
 	_monospace = !_monospace;
 	_screen.Clear();
-	_screen.DrawTextRegular(_font, _text, s_hOffset, s_vOffset, 1, false, _monospace);
+	_screen.DrawTextRegular(_font, _text, s_hOffset, s_vOffset, 1, _invert, _monospace);
 }
 
-FontTestWindow::FontTestWindow(const Font& font, const std::string& test, const std::string& testCyr, const std::string& nums, const std::string& special, uint32_t background, uint32_t foreground)
+void FontTestWindow::SwitchInvert()
+{
+	_invert = !_invert;
+	_screen.Clear();
+	_screen.DrawTextRegular(_font, _text, s_hOffset, s_vOffset, 1, _invert, _monospace);
+}
+
+FontTestWindow::FontTestWindow(const Font& font, std::atomic<bool>& flag, const std::string& test, const std::string& testCyr, const std::string& nums, const std::string& special, uint32_t background, uint32_t foreground)
 	: _font(font)
 	, _height(_calcWndHeight(font))
 	, _width(_calcWndWidth(font, test, testCyr, nums, special))
@@ -79,7 +90,10 @@ FontTestWindow::FontTestWindow(const Font& font, const std::string& test, const 
 	, _fontColor(foreground)
 	, _screen(_width, _height)
 	, _monospace(true)
+	, _testingFont(flag)
+	, _invert(false)
 {
+	_testingFont = true;
 	HICON hIcon = LoadIcon(GetModuleHandle(NULL), MAKEINTRESOURCE(IDI_ICON1));
 	SendMessage(glfwGetWin32Window(_pw._getHandle()), WM_SETICON, ICON_SMALL, (LPARAM)hIcon);
 	SendMessage(glfwGetWin32Window(_pw._getHandle()), WM_SETICON, ICON_BIG, (LPARAM)hIcon);
@@ -94,4 +108,5 @@ FontTestWindow::FontTestWindow(const Font& font, const std::string& test, const 
 FontTestWindow::~FontTestWindow()
 {
 	_pw.forceClose();
+	_testingFont = false;
 }
