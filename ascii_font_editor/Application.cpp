@@ -4,16 +4,17 @@
 #include "FontTestWindow.h"
 #include <thread>
 #include <sstream>
+#include "reutils.h"
 
-#define IDS_NEWWND						200
-#define IDS_COLUMNS						201
-#define IDS_UISCALE						202
-#define IDS_CHARC						203
-#define IDS_CHARH						204
-#define IDS_CHARW						205
-#define IDS_CHARI						206
-#define IDS_CHSEQ						207
-#define IDS_BTNCREATE					208
+#define IDC_NEWWND						200
+#define IDC_COLUMNS						201
+#define IDC_UISCALE						202
+#define IDC_CHARC						203
+#define IDC_CHARH						204
+#define IDC_CHARW						205
+#define IDC_CHARI						206
+#define IDC_CHSEQ						207
+#define IDC_BTNCREATE					208
 
 void MouseEvent(Canvas& canv, pw::mpos pos, int button, int action, int modes)
 {
@@ -188,19 +189,78 @@ bool Application::ProcessEventLoop()
 	return false;
 }
 
+static std::string calcCharSequenceString(std::string seq)
+{
+	if (seq.empty())
+		return "256";
+
+	int count = 0;
+	if (!reu::IsMatching(seq, "^[0-9a-fA-Fx\\ \\,\\-]+$"))
+		return "-1";
+
+	seq.erase(remove_if(seq.begin(), seq.end(), isspace), seq.end());
+	std::stringstream ss;
+	std::string str;
+
+	auto str2uch = [](const std::string& str) ->utf8char_t
+	{
+		utf8char_t ch;
+		if (reu::IsMatching(str, "^([0-9]+)$"))
+			ch = std::atoi(str.c_str());
+		else
+		{
+			std::stringstream conv;
+			conv << std::hex << str;
+			conv >> ch;
+		}
+		return ch;
+	};
+
+	ss << seq;
+	while (std::getline(ss, str, ','))
+	{
+		if (str.empty())
+			continue;
+
+		auto m = reu::Search(str, "^([0-9a-fA-Fx]+)\\-([0-9a-fA-Fx]+)$");
+		if (m.IsMatching())
+		{
+			utf8char_t lower = str2uch(m[1]);
+			utf8char_t higher = str2uch(m[2]);
+			if (lower > higher)
+			{
+				utf8char_t t = lower;
+				lower = higher;
+				higher = t;
+			}
+
+			for (utf8char_t i = lower; i <= higher; i++)
+				count++;
+		}
+		else if (reu::IsMatching(str, "^([0-9a-fA-Fx]+)$"))
+			count++;
+		else
+			return "-1";
+	}
+
+	char buf[128];
+	sprintf_s(buf, sizeof(buf), "%d", count);
+	return buf;
+}
+
 LRESULT CALLBACK NewWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
 	HWND btn, cols, scale, chars, charw, charh, chari, hseq;
 	Application* app = reinterpret_cast<Application*>(GetWindowLongPtr(hWnd, GWLP_USERDATA));
-	cols = GetDlgItem(hWnd, IDS_COLUMNS);
-	scale = GetDlgItem(hWnd, IDS_UISCALE);
-	chars = GetDlgItem(hWnd, IDS_CHARC);
-	charw = GetDlgItem(hWnd, IDS_CHARW);
-	charh = GetDlgItem(hWnd, IDS_CHARH);
-	chari = GetDlgItem(hWnd, IDS_CHARI);
-	hseq = GetDlgItem(hWnd, IDS_CHSEQ);
-	btn = GetDlgItem(hWnd, IDS_BTNCREATE);
-	auto wp = LOWORD(wParam);
+	cols = GetDlgItem(hWnd, IDC_COLUMNS);
+	scale = GetDlgItem(hWnd, IDC_UISCALE);
+	chars = GetDlgItem(hWnd, IDC_CHARC);
+	charw = GetDlgItem(hWnd, IDC_CHARW);
+	charh = GetDlgItem(hWnd, IDC_CHARH);
+	chari = GetDlgItem(hWnd, IDC_CHARI);
+	hseq = GetDlgItem(hWnd, IDC_CHSEQ);
+	btn = GetDlgItem(hWnd, IDC_BTNCREATE);
+	auto lwp = LOWORD(wParam), hwp = HIWORD(wParam);
 
 	int iCol, iScale, iCharC, iCharW, iCharH, iCharI;
 	std::string seq;
@@ -230,13 +290,21 @@ LRESULT CALLBACK NewWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 		break;
 
 	case WM_COMMAND:
-		switch (wp)
+		switch (lwp)
 		{
-		case IDS_BTNCREATE:
+		case IDC_BTNCREATE:
 			if (app->_createWorkspace(hWnd, seq, iCol, iCharH, iCharW, iCharI, iCharC, iScale))
 			{
 				CloseWindow(hWnd);
 				PostMessage(hWnd, WM_QUIT, 0, 0);
+			}
+			break;
+
+		case IDC_CHSEQ:
+			if (hwp == EN_CHANGE)
+			{
+				SetWindowTextA(chars, calcCharSequenceString(seq).c_str());
+				UpdateWindow(chars);
 			}
 			break;
 		}
@@ -255,7 +323,7 @@ void Application::_showNewWnd()
 	wc.hInstance = hInstance;
 	wc.lpszClassName = CLASS_NAME;
 	wc.hbrBackground = (HBRUSH)COLOR_WINDOW;
-	wc.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDS_NEWWND));
+	wc.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDC_NEWWND));
 
 	int width = 236;
 	int height = 210;
@@ -289,23 +357,23 @@ void Application::_showNewWnd()
 	CreateWindowElement(hwnd, ET_STATIC, "UI Scale:", hInstance, WS_VISIBLE, NULL, NULL, ox + 60 + 2, oy, 125, 20, false);
 	CreateWindowElement(hwnd, ET_STATIC, "Chars:", hInstance, WS_VISIBLE, NULL, NULL, ox + 60 * 2 + 2, oy, 125, 20, false);
 	oy += 17;
-	CreateWindowElement(hwnd, ET_EDIT, "24", hInstance, WS_VISIBLE | WS_BORDER | WS_TABSTOP, NULL, HMENU(IDS_COLUMNS), ox, oy, 30, 23, false);
-	CreateWindowElement(hwnd, ET_EDIT, "3", hInstance, WS_VISIBLE | WS_BORDER | WS_TABSTOP, NULL, HMENU(IDS_UISCALE), ox + 60 + 2, oy, 30, 23, false);
-	CreateWindowElement(hwnd, ET_EDIT, "256", hInstance, WS_VISIBLE | WS_BORDER | WS_TABSTOP, NULL, HMENU(IDS_CHARC), ox + 60 * 2 + 2, oy, 30, 23, false);
+	CreateWindowElement(hwnd, ET_EDIT, "24", hInstance, WS_VISIBLE | WS_BORDER | WS_TABSTOP, NULL, HMENU(IDC_COLUMNS), ox, oy, 30, 23, false);
+	CreateWindowElement(hwnd, ET_EDIT, "3", hInstance, WS_VISIBLE | WS_BORDER | WS_TABSTOP, NULL, HMENU(IDC_UISCALE), ox + 60 + 2, oy, 30, 23, false);
+	EnableWindow(CreateWindowElement(hwnd, ET_EDIT, "256", hInstance, WS_VISIBLE | WS_BORDER | WS_TABSTOP | ES_READONLY, NULL, HMENU(IDC_CHARC), ox + 60 * 2 + 2, oy, 30, 23, false), FALSE);
 	oy += 25;
 	CreateWindowElement(hwnd, ET_STATIC, "Char W:", hInstance, WS_VISIBLE, NULL, NULL, ox, oy, 125, 20, false);
 	CreateWindowElement(hwnd, ET_STATIC, "Char H:", hInstance, WS_VISIBLE, NULL, NULL, ox + 60 + 2, oy, 125, 20, false);
 	CreateWindowElement(hwnd, ET_STATIC, "Interval:", hInstance, WS_VISIBLE, NULL, NULL, ox + 60 * 2 + 2, oy, 125, 20, false);
 	oy += 17;
-	CreateWindowElement(hwnd, ET_EDIT, "8", hInstance, WS_VISIBLE | WS_BORDER | WS_TABSTOP, NULL, HMENU(IDS_CHARW), ox, oy, 30, 23, false);
-	CreateWindowElement(hwnd, ET_EDIT, "14", hInstance, WS_VISIBLE | WS_BORDER | WS_TABSTOP, NULL, HMENU(IDS_CHARH), ox + 60 + 2, oy, 30, 23, false);
-	CreateWindowElement(hwnd, ET_EDIT, "1", hInstance, WS_VISIBLE | WS_BORDER | WS_TABSTOP, NULL, HMENU(IDS_CHARI), ox + 60 * 2 + 2, oy, 30, 23, false);
+	CreateWindowElement(hwnd, ET_EDIT, "8", hInstance, WS_VISIBLE | WS_BORDER | WS_TABSTOP, NULL, HMENU(IDC_CHARW), ox, oy, 30, 23, false);
+	CreateWindowElement(hwnd, ET_EDIT, "14", hInstance, WS_VISIBLE | WS_BORDER | WS_TABSTOP, NULL, HMENU(IDC_CHARH), ox + 60 + 2, oy, 30, 23, false);
+	CreateWindowElement(hwnd, ET_EDIT, "1", hInstance, WS_VISIBLE | WS_BORDER | WS_TABSTOP, NULL, HMENU(IDC_CHARI), ox + 60 * 2 + 2, oy, 30, 23, false);
 	oy += 25;
 	CreateWindowElement(hwnd, ET_STATIC, "Char enum (e.g: [0x20, 113-217, 0xF1]):", hInstance, WS_VISIBLE, NULL, NULL, ox, oy, 230, 20, false);
 	oy += 17;
-	CreateWindowElement(hwnd, ET_EDIT, "0-255", hInstance, WS_VISIBLE | WS_BORDER | WS_TABSTOP, NULL, HMENU(IDS_CHSEQ), ox, oy, 200, 23, false);
+	CreateWindowElement(hwnd, ET_EDIT, "0-255", hInstance, WS_VISIBLE | WS_BORDER | WS_TABSTOP, NULL, HMENU(IDC_CHSEQ), ox, oy, 200, 23, false);
 	oy += 32;
-	CreateWindowElement(hwnd, ET_BUTTON, "Create", hInstance, WS_VISIBLE | WS_TABSTOP | BS_FLAT, NULL, HMENU(IDS_BTNCREATE), ox - 1, oy, 202, 25, false);
+	CreateWindowElement(hwnd, ET_BUTTON, "Create", hInstance, WS_VISIBLE | WS_TABSTOP | BS_FLAT, NULL, HMENU(IDC_BTNCREATE), ox - 1, oy, 202, 25, false);
 
 	SetWindowLongPtr(hwnd, GWLP_USERDATA, (LONG_PTR)this);
 	auto a = GetWindowLongPtr(hwnd, GWLP_USERDATA);
